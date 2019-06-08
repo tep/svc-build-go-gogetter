@@ -16,7 +16,13 @@ import (
 
 func main() {
 	cfg := config.New()
-	toolman.Init(cfg.Flags(), toolman.StandardSignals(), toolman.LogFlushInterval(2*time.Second), toolman.LogToStderr())
+
+	toolman.Init(
+		cfg.Flags(),
+		toolman.StandardSignals(),
+		toolman.LogFlushInterval(2*time.Second),
+		toolman.LogDir(cfg.LogDir))
+
 	ctx := context.Background()
 
 	if err := run(ctx, cfg); err != nil {
@@ -45,6 +51,13 @@ func run(ctx context.Context, cfg *config.Config) error {
 	x.Dump()
 
 	s := server.New(cfg, x)
+
+	toolman.RegisterShutdown(func() {
+		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+
+		s.Shutdown(ctx)
+	})
 
 	return s.ListenAndServe()
 }

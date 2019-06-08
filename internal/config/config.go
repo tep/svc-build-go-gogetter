@@ -19,6 +19,7 @@ type Config struct {
 	Hostname      string      `cfg:"hostname"`
 	Port          int64       `cfg:"port"`
 	Socket        string      `cfg:"socket"`
+	LogDir        string      `cfg:"logdir"`
 	ClientID      string      `cfg:"client-id"`
 	IntegrationID int         `cfg:"integration-id"`
 	HookSecret    string      `cfg:"hook-secret"`
@@ -53,6 +54,12 @@ func (c *Config) FlagSet(fs *pflag.FlagSet) {
 }
 
 func (c *Config) Validate() error {
+	if f := pflag.Lookup("log_dir"); f != nil {
+		fmt.Printf("\n#####[log_dir]: %#v\n\n", f)
+	}
+
+	c.LogDir = c.deriveLogDir()
+
 	if c.APIKey == "" {
 		return errors.New("config has no Github API Key")
 	}
@@ -83,6 +90,17 @@ func (c *Config) Validate() error {
 	}
 
 	return nil
+}
+
+const logDirFlag = "log_dir"
+
+func (c *Config) deriveLogDir() string {
+	if pflag.CommandLine.Changed(logDirFlag) {
+		ld, _ := pflag.CommandLine.GetString(logDirFlag)
+		return ld
+	}
+
+	return c.LogDir
 }
 
 func commandName() string {
