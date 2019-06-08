@@ -1,9 +1,16 @@
 package server
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"net"
 	"net/http"
+	"net/http/fcgi"
+	"os"
 	"path"
+	"strconv"
+	"strings"
 
 	"github.com/google/go-github/v25/github"
 	"github.com/gorilla/mux"
@@ -31,10 +38,74 @@ func (s *Server) ListenAndServe() error {
 	r.Queries("go-get", "1").Handler(httperr.Handler(s.reroute))
 	r.Handle("/hook", httperr.Handler(s.receiveHook))
 
+	if s.Socket != "" {
+		return s.fcgiServe(r)
+	}
+
 	// TODO: Add alternate support for FastCGI over unix-domain sockets.
 	//       (See ~gto/gosrc-redirector/main.go?func=fcgiServe)
-	log.Info("Server ready.")
-	return http.ListenAndServe(s.addr(), r)
+	addr := s.addr()
+	log.Infof("HTTP Server Ready: %s", addr)
+	return http.ListenAndServe(addr, r)
+}
+
+func (s *Server) Shutdown(ctx context.Context) {
+	log.Warning("Server shutdown not yet implemented")
+}
+
+func (s *Server) fcgiServe(hndlr http.Handler) error {
+	var (
+		lis net.Listener
+		err error
+		del bool
+	)
+
+	if strings.ToLower(s.Socket) == "systemd" {
+		lis, err = systemdListener()
+	} else {
+		if lis, err = net.Listen("unix", s.Socket); err == nil {
+			del = true
+		}
+	}
+
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		lis.Close()
+		if del {
+			os.Remove(s.Socket)
+		}
+	}()
+
+	log.Infof("FCGI Server Ready: %s", s.Socket)
+	return fcgi.Serve(lis, hndlr)
+}
+
+func systemdListener() (net.Listener, error) {
+	lpid, lfds := os.Getenv("LISTEN_PID"), os.Getenv("LISTEN_FDS")
+	if lpid == "" || lfds == "" {
+		return nil, errors.New("systemd socket not found")
+	}
+
+	pid := os.Getpid()
+
+	if i, err := strconv.Atoi(lpid); err != nil || i != pid {
+		if err == nil {
+			err = fmt.Errorf("systemd socket pid mismatch: got %d; wanted %d", i, pid)
+		}
+		return nil, err
+	}
+
+	if i, err := strconv.Atoi(lfds); err != nil || i != 1 {
+		if err == nil {
+			err = fmt.Errorf("systemd socket count mismatch: got %d; wanted 1", i)
+		}
+		return nil, err
+	}
+
+	return net.FileListener(os.NewFile(uintptr(3), "systemd:socket"))
 }
 
 func (s *Server) addr() string {
