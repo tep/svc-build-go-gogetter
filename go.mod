@@ -10,8 +10,6 @@ require (
 	github.com/spf13/pflag v1.0.3
 	toolman.org/base/basecfg v0.1.0
 	toolman.org/base/log/v2 v2.1.0
-	toolman.org/base/toolman/v2 v2.1.1
+	toolman.org/base/toolman/v2 v2.1.2
 	toolman.org/net/http/httperr v0.1.2
 )
-
-replace toolman.org/base/basecfg => ../../../../base/basecfg
